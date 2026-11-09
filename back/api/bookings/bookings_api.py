@@ -1,5 +1,4 @@
-import time
-import hashlib
+import secrets
 import string
 import random
 from datetime import date
@@ -40,8 +39,13 @@ def get_booking_checkout_lines(reference: str):
     if not booking.is_paid:
         return {'error': 'Cannot get checkout lines without payment'}, 422
 
+    # correctif D3 (SSRF) : on ne fait jamais confiance à un checkout_session_id fourni
+    # par le client pour construire l'URL sortante vers Stripe. On utilise uniquement
+    # l'id de session déjà stocké sur CETTE réservation : le paramètre client ne peut
+    # donc plus influencer quel endpoint le serveur va requêter.
+    checkout_session_id = booking.stripe_checkout_session_id
+
     try:
-        checkout_session_id = request.args.get("checkout_session_id")
         return jsonify(get_checkout_lines(checkout_session_id))
     except:
         return {'error': 'Invalid checkout session ID'}, 404
@@ -90,9 +94,9 @@ def new_booking():
     # Generate random booking reference
     booking_reference = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
 
-    # Generate random confirmation secret
-    random_string = str(int(time.time())) # get current timestamp in seconds
-    checkout_confirmation_secret = hashlib.sha512(random_string.encode('utf-8')).hexdigest() # hash it with safe sha512
+    # Génération du secret de confirmation avec une source d'aléa cryptographique
+    # (correctif D4 : avant, sha512(timestamp unix courant) était prévisible/brute-forçable)
+    checkout_confirmation_secret = secrets.token_hex(32)  # 256 bits d'entropie
 
     # Create Stripe checkout session
     checkout_session = create_checkout(
@@ -135,7 +139,8 @@ def confirm_booking_checkout(reference: str):
     if not booking:
         return {'error': 'Booking not found'}, 404
     
-    if booking.checkout_confirmation_secret != request.json["confirmationSecret"]:
+    # correctif D4 : comparaison en temps constant pour éviter de fuiter le secret via le timing de la réponse
+    if not secrets.compare_digest(booking.checkout_confirmation_secret, request.json.get("confirmationSecret", "")):
         return {'error': 'Invalid confirmation secret'}, 422
 
     booking.is_paid = True
