@@ -1,7 +1,12 @@
 from flask import Flask
 from flask_cors import CORS
+from werkzeug.serving import WSGIRequestHandler
 from database.init import db
 from database.seed import seed_database
+
+# Ne pas exposer le serveur WSGI ni les versions dans l'en-tete Server (D8)
+WSGIRequestHandler.server_version = "hackbnb"
+WSGIRequestHandler.sys_version = ""
 
 from api.rooms.rooms_models import Room
 from api.rooms.rooms_api import rooms_api
@@ -39,8 +44,9 @@ def welcome():
 
 
 if __name__ == '__main__':
+   # debug=False en production : pas de debugger interactif ni de traceback exposés (D8)
    app.run(
-      debug=True,
+      debug=False,
       host="0.0.0.0",
       port=9001,
    )
