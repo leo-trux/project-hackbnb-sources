@@ -1,8 +1,10 @@
-from flask import Blueprint, request, send_file
+from flask import Blueprint, request, send_from_directory, abort
 
 uploads_api = Blueprint('uploads', __name__)
 
 @uploads_api.route('/')
 def get_upload():
-   return send_file('uploads/' + request.args.get("name"))
- 
+   name = request.args.get("name")
+   if not name:
+      abort(400)
+   return send_from_directory('uploads', name)
